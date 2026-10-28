@@ -24,16 +24,24 @@ const KEYS = [['t', '完成時間 (秒)'], ['passDelay', '路過者平均延遲 
   ['stopN', '駐足人數'], ['stopDwell', '平均駐足 (秒)']];
 
 const runs = {off: [], on: []};
+let stuck = 0;
 for (let k = 0; k < K; k++)
   for (const [name, m] of [['off', false], ['on', true]]) {
     const s = new Sim(scene, {markings: m, seed: seed0 + k});
     if (s.noFlow) { console.error('場景需要至少一個入口和一個出口'); process.exit(1); }
-    while (!s.finished) s.step();
-    runs[name].push(s.summary());
+    const tMax = 3600;  // 保險：模擬時間上限，超過視為有人卡死
+    while (!s.finished && s.t < tMax) s.step();
+    const sm = s.summary();
+    runs[name].push(sm);
+    if (!s.finished || sm.exited !== sm.spawned) {
+      stuck++;
+      console.error(`警告：種子 ${seed0 + k} 標線${m ? '有' : '無'}：spawned=${sm.spawned} exited=${sm.exited} 場內=${sm.present}`);
+    }
   }
 
 const mean = (list, key) => list.reduce((a, r) => a + r[key], 0) / list.length;
 console.log(`${scene.params.total} 人 · 遵守率 ${scene.params.compliance}% · 種子 ${seed0}${K > 1 ? '…' + (seed0 + K - 1) : ''}`);
+console.log(stuck ? `卡死檢查：${stuck} 次未清場` : `卡死檢查：全部 ${2 * K} 次 exited == spawned`);
 console.log('指標'.padEnd(22) + '無標線'.padStart(10) + '有標線'.padStart(10) + '差'.padStart(8));
 const result = {};
 for (const [key, label] of KEYS) {
@@ -42,4 +50,4 @@ for (const [key, label] of KEYS) {
   console.log(label.padEnd(20) + a.toFixed(2).padStart(10) + b.toFixed(2).padStart(10) +
     (a ? ((b - a) / a * 100).toFixed(0) + '%' : '—').padStart(8));
 }
-if (opt('json')) fs.writeFileSync(opt('json'), JSON.stringify({params: scene.params, seeds: K, seed0, result}, null, 1));
+if (opt('json')) fs.writeFileSync(opt('json'), JSON.stringify({params: scene.params, seeds: K, seed0, stuck, result}, null, 1));
