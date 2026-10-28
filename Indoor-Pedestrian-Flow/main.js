@@ -8,7 +8,8 @@ const LS_KEY = 'ipf-scene-v1';
 const TOOLS = [
   {k: 'select',    t: '選取／移動', i: '↖', help: '點選物件；拖曳可移動'},
   {k: 'wall',      t: '牆',         i: '▬', help: '拖曳畫一道牆（門口請在牆上留缺口）', line: true},
-  {k: 'pillar',    t: '柱子',       i: '●', help: '點一下放置圓柱'},
+  {k: 'fence',     t: '圍欄',       i: '┆', help: '拖曳畫伸縮圍欄（紅龍柱）：實體、誰都過不去，只在「啟用標線」時存在', line: true},
+  {k: 'pillar',    t: '柱子',      i: '●', help: '點一下放置圓柱'},
   {k: 'box',       t: '障礙物',     i: '▭', help: '拖曳畫矩形：售票機、長椅、花台…', rect: true, dw: 1.5, dh: 1.5},
   {k: 'attractor', t: '吸引物',     i: '♪', help: '拖曳畫矩形：公共鋼琴、展示、快閃攤…', rect: true, dw: 2, dh: 1.6},
   {k: 'entrance',  t: '入口',       i: '⇥', help: '拖曳畫一段入口線，人從這裡出生', line: true},
@@ -17,8 +18,8 @@ const TOOLS = [
   {k: 'walk',      t: '通行帶',     i: '⇉', help: '拖曳畫標線帶：引導路過者走在這裡', rect: true, dw: 3, dh: 6},
   {k: 'erase',     t: '刪除',       i: '✕', help: '點物件即刪除'},
 ];
-const TYPE_NAME = {wall: '牆', pillar: '柱子', box: '障礙物', attractor: '吸引物', entrance: '入口', exit: '出口', stay: '駐足線區', walk: '通行帶'};
-const COLOR = {entrance: '#39c06a', exit: '#e0735c', stay: '#e9b13a', walk: '#4cc3d9', attractor: '#b57bee'};
+const TYPE_NAME = {wall: '牆', fence: '圍欄', pillar: '柱子', box: '障礙物', attractor: '吸引物', entrance: '入口', exit: '出口', stay: '駐足線區', walk: '通行帶'};
+const COLOR = {fence: '#d98cb3', entrance: '#39c06a', exit: '#e0735c', stay: '#e9b13a', walk: '#4cc3d9', attractor: '#b57bee'};
 
 let scene = loadSaved() || demoScene();
 let tool = TOOLS[0], sel = null, drag = null, preview = null, hover = null;
@@ -87,8 +88,14 @@ $('totalSel').onchange = e => {
 $('totalNum').onchange = e => { const v = Math.round(clampNum(e.target.value, 1, 5000)); e.target.value = v; param('total', v); };
 $('spawnSec').onchange = e => { const v = Math.round(clampNum(e.target.value, 5, 1800)); e.target.value = v; param('spawnSec', v); };
 $('seed').onchange = e => { const v = Math.round(clampNum(e.target.value, 0, 999999)); e.target.value = v; param('seed', v); };
-// 標線開關可以在模擬途中切換：新的路徑與新的駐足選位立刻生效，已站定的人不會被搬走
-$('markings').onchange = e => { scene.params.markings = e.target.checked; if (sim) sim.markings = e.target.checked; persist(); draw(); };
+// 沒有圍欄時，標線開關可以在模擬途中切換：新的路徑與新的駐足選位立刻生效，已站定的人不會被搬走。
+// 有圍欄時它會改變場地幾何，必須重來。
+$('markings').onchange = e => {
+  scene.params.markings = e.target.checked;
+  if (scene.objects.some(o => o.type === 'fence')) { edited(false); note.textContent = '場景有圍欄，切換標線後模擬已重置。'; return; }
+  if (sim) sim.markings = e.target.checked;
+  persist(); draw();
+};
 $('compliance').oninput = e => { $('compVal').textContent = e.target.value; };
 $('compliance').onchange = e => param('compliance', +e.target.value);
 $('worldW').onchange = $('worldH').onchange = () => {
@@ -317,7 +324,7 @@ function segDistTo(o, x, y) {
 }
 // 實體物件優先於標線區，後畫的（較上層）優先
 function hit(x, y) {
-  const order = ['wall', 'entrance', 'exit', 'pillar', 'box', 'attractor', 'walk', 'stay'];
+  const order = ['wall', 'fence', 'entrance', 'exit', 'pillar', 'box', 'attractor', 'walk', 'stay'];
   for (const type of order) {
     const list = scene.objects.filter(o => o.type === type);
     for (let i = list.length - 1; i >= 0; i--) {
@@ -333,7 +340,7 @@ function hit(x, y) {
 function defaults(type, g) {
   const o = {id: scene.nextId++, type, ...g};
   const n = scene.objects.filter(x => x.type === type).length + 1;
-  if (type === 'attractor') Object.assign(o, {label: '公共鋼琴', pStop: 30, dwell: 40, attn: 7});
+  if (type === 'attractor') Object.assign(o, {label: '公共鋼琴', pStop: 30, dwell: 40, attn: 7, face: 90, arc: 360, gMin: 0.5, gMax: 1.8});
   if (type === 'entrance') Object.assign(o, {weight: 1, dest: 'any', name: '入口' + n});
   if (type === 'exit') Object.assign(o, {weight: 1, name: '出口' + n});
   if (type === 'box') o.label = '';
@@ -426,8 +433,9 @@ function inspect() {
     num: (label, key, min, max, step) => field(label, 'number', o, key, {min, max, step}),
     txt: (label, key) => field(label, 'text', o, key, {maxLength: 12}),
   };
-  if (o.type === 'wall') inspector.insertAdjacentHTML('beforeend',
-    `<p class="empty">長度 ${Math.hypot(o.x2 - o.x1, o.y2 - o.y1).toFixed(1)} m</p>`);
+  if (o.type === 'wall' || o.type === 'fence') inspector.insertAdjacentHTML('beforeend',
+    `<p class="empty">長度 ${Math.hypot(o.x2 - o.x1, o.y2 - o.y1).toFixed(1)} m</p>` +
+    (o.type === 'fence' ? '<p class="empty small">實體，誰都過不去（與「遵守率」無關）。標線總開關關掉時整排不存在。</p>' : ''));
   if (o.type === 'pillar') F.num('半徑 (m)', 'r', 0.1, 3, 0.1);
   if ('w' in o) { F.num('寬 (m)', 'w', 0.3, 100, 0.5); F.num('深 (m)', 'h', 0.3, 80, 0.5); }
   if (o.type === 'box' || o.type === 'attractor') F.txt('標籤', 'label');
@@ -435,8 +443,20 @@ function inspect() {
     F.num('停下機率 %', 'pStop', 0, 100, 5);
     F.num('平均停留 (秒)', 'dwell', 3, 600, 5);
     F.num('注意半徑 (m)', 'attn', 1, 30, 1);
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<label>正面朝向</label>';
+    const el = document.createElement('select');
+    [['270', '北 ↑'], ['0', '東 →'], ['90', '南 ↓'], ['180', '西 ←']].forEach(([v, t]) => el.add(new Option(t, v)));
+    el.value = String(Math.round(o.face / 90) * 90 % 360);
+    el.onchange = () => { o.face = +el.value; edited(false); };
+    row.appendChild(el);
+    inspector.appendChild(row);
+    F.num('聚集扇形 (度)', 'arc', 30, 360, 15);
+    F.num('站位最近 (m)', 'gMin', 0, 10, 0.5);
+    F.num('站位最遠 (m)', 'gMax', 0.5, 15, 0.5);
     inspector.insertAdjacentHTML('beforeend',
-      '<p class="empty small">路過的人第一次走進注意半徑時抽一次籤，抽中就走去站著聽／看。</p>');
+      '<p class="empty small">路過的人第一次走進注意半徑時抽一次籤，抽中就走去站著聽／看。沒有駐足區時，人在正面的扇形範圍內由近而遠排開；360 度＝繞一整圈。</p>');
   }
   if (o.type === 'entrance' || o.type === 'exit') {
     F.txt('名稱', 'name');
@@ -544,6 +564,19 @@ function solid(o) {
     ctx.strokeStyle = '#7b848f'; ctx.lineWidth = 0.2; ctx.lineCap = 'round';
     line(o.x1, o.y1, o.x2, o.y2);
     ctx.lineCap = 'butt';
+  } else if (o.type === 'fence') {
+    ctx.save();
+    ctx.globalAlpha = scene.params.markings ? 1 : 0.3;     // 停用時只留淡淡輪廓
+    ctx.strokeStyle = COLOR.fence; ctx.lineWidth = 0.08;
+    ctx.setLineDash([0.25, 0.15]);
+    line(o.x1, o.y1, o.x2, o.y2);
+    ctx.setLineDash([]);
+    ctx.fillStyle = COLOR.fence;
+    const n = Math.max(1, Math.round(Math.hypot(o.x2 - o.x1, o.y2 - o.y1) / 1.5));   // 約每 1.5 m 一根柱
+    for (let i = 0; i <= n; i++) {
+      ctx.beginPath(); ctx.arc(o.x1 + (o.x2 - o.x1) * i / n, o.y1 + (o.y2 - o.y1) * i / n, 0.14, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   } else if (o.type === 'pillar') {
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
     ctx.fillStyle = '#4b525a'; ctx.fill();
@@ -619,6 +652,14 @@ function selectionMark(o) {
     ctx.strokeStyle = 'rgba(181,123,238,.6)'; ctx.setLineDash([0.4, 0.4]);
     ctx.beginPath(); ctx.arc(o.x + o.w / 2, o.y + o.h / 2, o.attn, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+    // 聚集範圍：正面朝向的扇形（近端 gMin、遠端 gMax 約略以中心起算）
+    const cx = o.x + o.w / 2, cy = o.y + o.h / 2, ext = Math.max(o.w, o.h) / 2;
+    const a0 = (o.face - o.arc / 2) * Math.PI / 180, a1 = (o.face + o.arc / 2) * Math.PI / 180;
+    ctx.strokeStyle = 'rgba(181,123,238,.9)'; ctx.fillStyle = 'rgba(181,123,238,.08)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, ext + o.gMax, a0, a1);
+    if (o.arc < 360) ctx.lineTo(cx, cy);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
   }
 }
 

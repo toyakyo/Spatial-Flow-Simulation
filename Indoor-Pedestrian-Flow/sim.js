@@ -2,7 +2,8 @@
 // 做法：社會力模型（Social Force）+ 導航場（Dijkstra 距離場）。
 //   導航場負責「繞過牆與障礙走去目標」，社會力負責「人與人、人與牆之間的推擠與閃避」。
 // 標線的作用方式：
-//   駐足區 stay — 守規矩的駐足者會站進區內（並挑較空的位置）；守規矩的路過者把穿越該區的路徑成本 ×4，會繞開。
+//   圍欄 fence — 伸縮圍欄（紅龍柱），實體、誰都穿不過；算標線，總開關關掉時不存在。
+//   駐足區 stay —守規矩的駐足者會站進區內（並挑較空的位置）；守規矩的路過者把穿越該區的路徑成本 ×4，會繞開。
 //   通行帶 walk — 守規矩的路過者路徑成本 ×0.6，偏好走在帶內；守規矩的駐足者不會挑帶內的位置站。
 //   「守規矩」是每個人各自抽籤（遵守率），標線總開關關掉時全部人都當標線不存在。
 (function (root) {
@@ -12,7 +13,8 @@ const CELL = 0.3;        // 導航格邊長（公尺）
 const DT = 0.05;         // 模擬步長（秒）
 const HASH = 1.5;        // 鄰居搜尋格，同時是人際作用力的截斷距離
 const TAU = 0.5;         // 加速到期望速度的反應時間
-const K_BODY = 100;      // 身體接觸的彈性係數
+const SIDE = 0.35;       // 人際排斥力的側向分量比例，打破迎面僵局
+const K_BODY = 100;     // 身體接觸的彈性係數
 const STAY_COST = 4, WALK_COST = 0.6;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -28,7 +30,7 @@ function mulberry32(a) {
 const gauss = r => Math.sqrt(-2 * Math.log(1 - r() || 1e-9)) * Math.cos(2 * Math.PI * r());
 
 /* ---------- 場景資料 ---------- */
-const TYPES = ['wall', 'pillar', 'box', 'attractor', 'entrance', 'exit', 'stay', 'walk'];
+const TYPES = ['wall', 'fence', 'pillar', 'box', 'attractor', 'entrance', 'exit', 'stay', 'walk'];
 
 function blankScene(W = 36, H = 22) {
   return {
@@ -58,7 +60,7 @@ function normalize(raw) {
     seen.add(id);
     const out = {id, type: o.type};
     const X = (v, d = 0) => num(v, d, -1, s.W + 1), Y = (v, d = 0) => num(v, d, -1, s.H + 1);
-    if (o.type === 'wall' || o.type === 'entrance' || o.type === 'exit') {
+    if (o.type === 'wall' || o.type === 'fence' || o.type === 'entrance' || o.type === 'exit') {
       out.x1 = X(o.x1); out.y1 = Y(o.y1); out.x2 = X(o.x2); out.y2 = Y(o.y2);
     } else if (o.type === 'pillar') {
       out.x = X(o.x); out.y = Y(o.y); out.r = num(o.r, 0.4, 0.1, 3);
@@ -70,6 +72,10 @@ function normalize(raw) {
       out.pStop = num(o.pStop, 30, 0, 100);
       out.dwell = num(o.dwell, 40, 3, 600);
       out.attn = num(o.attn, 7, 1, 30);
+      out.face = num(o.face, 90, 0, 360);      // 正面朝向（度）：0 東、90 南、180 西、270 北
+      out.arc = num(o.arc, 360, 30, 360);      // 聚集扇形的總角度，360 = 繞一整圈
+      out.gMin = num(o.gMin, 0.5, 0, 10);      // 站位離吸引物外緣的最近／最遠距離（公尺）
+      out.gMax = Math.max(out.gMin + 0.1, num(o.gMax, 1.8, 0.1, 15));
     }
     if (o.type === 'entrance') { out.weight = num(o.weight, 1, 0, 100); out.dest = o.dest === 'any' ? 'any' : Math.round(+o.dest) || 'any'; }
     if (o.type === 'exit') out.weight = num(o.weight, 1, 0, 100);
@@ -221,6 +227,9 @@ class Sim {
     this.obs = [];
     for (const o of scene.objects) {
       if (o.type === 'wall') this.obs.push({k: 'seg', x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, r: 0.1});
+      // 圍欄（紅龍柱）是實體，所有人都過不去；但它算「標線」的一種，總開關關掉時整排不存在。
+      // 因為它改的是幾何，所以只在建構時決定，中途切開關要重建 Sim。
+      else if (o.type === 'fence') { if (this.markings) this.obs.push({k: 'seg', x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, r: 0.04}); }
       else if (o.type === 'pillar') this.obs.push({k: 'circ', x: o.x, y: o.y, r: o.r});
       else if (o.type === 'box' || o.type === 'attractor') this.obs.push({k: 'rect', x: o.x, y: o.y, w: o.w, h: o.h});
     }
@@ -409,22 +418,25 @@ class Sim {
       let best = 4;
       for (const z of this.stays) { const d = rectDist(z, cx, cy); if (d < best) { best = d; zone = z; } }
     }
+    const gMin = at.gMin ?? 0.5, gMax = at.gMax ?? 1.8, arc = at.arc ?? 360, face = at.face ?? 90;
     let spot = null, bestScore = Infinity;
-    for (let k = 0; k < (zone ? 12 : 6); k++) {
-      let x, y;
-      if (zone) { x = zone.x + rng() * zone.w; y = zone.y + rng() * zone.h; }
-      else {                                            // 沒標線：貼著吸引物外緣隨意圍成一圈
-        const th = rng() * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
+    // 候選位置取最好的一個：先看附近有沒有人（擁擠扣分），再看離吸引物遠不遠（越遠扣分）。
+    // 所以早到的人站在最前面，後來的人往外排，形成一圈圈往外長的人牆。
+    for (let k = 0; k < 12; k++) {
+      let x, y, far;
+      if (zone) { x = zone.x + rng() * zone.w; y = zone.y + rng() * zone.h; far = rectDist(at, x, y); }
+      else {                                            // 沒標線：在吸引物正面的扇形範圍自然聚集
+        const th = (face + (rng() - 0.5) * arc) * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
         const sup = Math.min(at.w / 2 / (Math.abs(c) || 1e-6), at.h / 2 / (Math.abs(s) || 1e-6));
-        const rho = sup + 0.5 + rng() * 1.3;
-        x = cx + c * rho; y = cy + s * rho;
+        far = Math.sqrt(gMin * gMin + rng() * (gMax * gMax - gMin * gMin));   // 面積均勻
+        x = cx + c * (sup + far); y = cy + s * (sup + far);
       }
       if (!this._free(x, y, a.r + 0.1)) continue;
       if (zone && this.walks.some(w => inRect(w, x, y))) continue;
-      let score = 0;
-      if (zone) for (const b of this.agents) if (b.spot && Math.hypot(b.spot.x - x, b.spot.y - y) < 0.6) score++;
+      let crowd = 0;
+      for (const b of this.agents) if (b.spot && Math.hypot(b.spot.x - x, b.spot.y - y) < 0.6) crowd++;
+      const score = crowd + 0.25 * far;
       if (score < bestScore) { bestScore = score; spot = {x, y}; }
-      if (!zone || score === 0) break;
     }
     return spot || {x: cx, y: at.y + at.h + 1};
   }
@@ -482,7 +494,8 @@ class Sim {
             const w = 0.4 + 0.6 * (1 - (a.ex * nx + a.ey * ny)) / 2;
             let f = (still ? 6 : 5) * Math.exp((rij - d) / (still ? 0.45 : 0.3)) * w;
             if (d < rij) f += K_BODY * (rij - d);
-            ax += f * nx; ay += f * ny;
+            // 加一點固定側向分量（人人都往同一側閃）：否則窄道裡正面相遇的兩人力量完全對稱，會互相頂死
+            ax += f * (nx - SIDE * ny); ay += f * (ny + SIDE * nx);
           }
       // 人與牆、柱、障礙物
       for (const b of this.obs) {
