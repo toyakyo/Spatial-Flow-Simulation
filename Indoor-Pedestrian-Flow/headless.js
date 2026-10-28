@@ -1,6 +1,6 @@
 // 無畫面批次模擬（Node，不需瀏覽器），給雲端 session／CI 用。
 //   node headless.js [scene.json] [--n 1000] [--seed 1] [--compliance 80] [--seeds 5] [--json out.json]
-// 預設跑 scenes/tainan-station.json，同種子各跑「無標線／有標線」一次並印出比較表。
+// 預設跑 scenes/tainan-b1-piano.json，同種子各跑「無標線／有標線」一次並印出比較表。
 // --seeds K：連跑 K 個種子（seed, seed+1, …）取平均，單一種子的差異可能只是運氣。
 const fs = require('fs');
 const path = require('path');
@@ -11,8 +11,8 @@ const opt = k => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1]
 const file = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'));
 
 const scene = file ? normalize(JSON.parse(fs.readFileSync(file, 'utf8')))
-  : fs.existsSync(path.join(__dirname, 'scenes/tainan-station.json'))
-    ? normalize(JSON.parse(fs.readFileSync(path.join(__dirname, 'scenes/tainan-station.json'), 'utf8')))
+  : fs.existsSync(path.join(__dirname, 'scenes/tainan-b1-piano.json'))
+    ? normalize(JSON.parse(fs.readFileSync(path.join(__dirname, 'scenes/tainan-b1-piano.json'), 'utf8')))
     : demoScene();
 if (opt('n')) scene.params.total = +opt('n');
 if (opt('compliance')) scene.params.compliance = +opt('compliance');

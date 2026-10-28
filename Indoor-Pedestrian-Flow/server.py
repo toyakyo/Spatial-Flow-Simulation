@@ -16,7 +16,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SCENES = os.path.join(ROOT, "scenes")
 NAME = re.compile(r"^[\w-]{1,40}$")
 MAX_BODY = 2 * 1024 * 1024
-PROTECTED = {"tainan-station", "tainan-b1-piano"}   # repo 內建範例，不允許從介面刪除
+PROTECTED = {"tainan-b1-piano"}   # 預設場景，不允許從介面刪除（main.js 的 DEFAULT_SCENE 要同步）
 
 
 class Handler(SimpleHTTPRequestHandler):

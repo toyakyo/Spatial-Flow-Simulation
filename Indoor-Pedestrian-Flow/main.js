@@ -21,7 +21,9 @@ const TOOLS = [
 const TYPE_NAME = {wall: '牆', fence: '圍欄', pillar: '柱子', box: '障礙物', attractor: '吸引物', entrance: '入口', exit: '出口', stay: '駐足線區', walk: '通行帶'};
 const COLOR = {fence: '#d98cb3', entrance: '#39c06a', exit: '#e0735c', stay: '#e9b13a', walk: '#4cc3d9', attractor: '#b57bee'};
 
-let scene = loadSaved() || demoScene();
+const DEFAULT_SCENE = 'tainan-b1-piano';   // 預設場景檔，server.py 的 PROTECTED 同步保護它
+const saved = loadSaved();
+let scene = saved || demoScene();           // 沒有存檔時先用內建的，下面再非同步換成預設場景檔
 let tool = TOOLS[0], sel = null, drag = null, preview = null, hover = null;
 let sim = null, running = false, speed = 5, heat = 'off', S = 24, busy = false;
 
@@ -108,7 +110,14 @@ $('heat').onchange = e => { heat = e.target.value; draw(); };
 
 function clampNum(v, lo, hi) { v = +v; return Math.min(hi, Math.max(lo, isFinite(v) ? v : lo)); }
 
-$('demo').onclick = () => setScene(demoScene(), '已載入範例場景。');
+// 預設場景是 scenes/ 底下的檔案；用 file:// 直接開網頁讀不到時，退回 sim.js 內建的示意大廳
+function loadDefault(msg) {
+  return fetch(`scenes/${DEFAULT_SCENE}.json`)
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(d => setScene(normalize(d), msg))
+    .catch(() => setScene(demoScene(), '讀不到預設場景檔，已載入內建示意大廳。'));
+}
+$('demo').onclick = () => loadDefault('已載入預設場景：台南車站 B1 公共鋼琴。');
 $('wipe').onclick = () => {
   if (!confirm('清空整個場地？所有物件都會消失，無法復原。')) return;
   setScene(blankScene(scene.W, scene.H), '場地已清空。');
@@ -684,6 +693,7 @@ function drawPreview() {
 }
 
 /* ---------- 啟動 ---------- */
-note.textContent = '範例：南進北出的主動線上有一台公共鋼琴。按「標線 有／無 批次比較」看標線的影響，或自己拖曳改場景。';
+note.textContent = '按「標線 有／無 批次比較」看標線的影響，或自己拖曳改場景。';
 syncTools(); syncPanel(); resize(); draw(); inspect(); showMetrics(true);
 refreshServerList();
+if (!saved) loadDefault('預設場景：台南車站 B1 公共鋼琴（依配置圖與現場照片估計，非實測）。');
