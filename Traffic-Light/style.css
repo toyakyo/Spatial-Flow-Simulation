@@ -1,0 +1,57 @@
+:root{
+  --asphalt:#22252a; --ground:#15171a; --panel:#1b1e22; --line:#31363d;
+  --ink:#e6e9ee; --dim:#8b939e;
+  --red:#e0453c; --amber:#e9b13a; --green:#39c06a;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:14px/1.5 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+}
+header{
+  display:flex; align-items:baseline; gap:12px;
+  padding:14px 20px; border-bottom:1px solid var(--line);
+}
+header h1{font-size:16px; margin:0; letter-spacing:.08em}
+header span{color:var(--dim); font-size:12px}
+main{display:flex; gap:16px; padding:16px; align-items:flex-start; flex-wrap:wrap}
+.panel{
+  background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px;
+  width:220px; flex:none;
+}
+.panel h2{
+  font-size:11px; letter-spacing:.14em; color:var(--dim);
+  margin:0 0 10px; font-weight:600;
+}
+.tiles{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+.tiles button{
+  aspect-ratio:1; background:var(--asphalt); color:var(--ink);
+  border:1px solid var(--line); border-radius:4px; cursor:pointer;
+  font:18px/1 "Menlo",monospace;
+}
+.tiles button.wide{grid-column:span 2; aspect-ratio:auto; padding:8px 0; font-size:12px}
+.tiles button:hover{border-color:#5a636e}
+.tiles button[aria-pressed="true"]{border-color:var(--green); color:var(--green)}
+canvas{border:1px solid var(--line); border-radius:6px; display:block; cursor:crosshair}
+.row{display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0}
+.row label{color:var(--dim)}
+select{
+  background:var(--asphalt); color:var(--ink); border:1px solid var(--line);
+  border-radius:4px; padding:3px 6px; font-size:13px;
+}
+.approach{border-top:1px solid var(--line); padding-top:8px; margin-top:10px}
+.approach b{font-size:12px; letter-spacing:.06em}
+.empty{color:var(--dim); font-size:13px}
+.btn{
+  background:var(--asphalt); color:var(--ink); border:1px solid var(--line);
+  border-radius:4px; padding:5px 9px; cursor:pointer; font-size:12px;
+}
+.btn:hover{border-color:#5a636e}
+.btn.full{width:100%; padding:8px; margin-top:6px}
+.btn[aria-pressed="true"]{border-color:var(--green); color:var(--green)}
+input[type=number]{
+  width:58px; background:var(--asphalt); color:var(--ink);
+  border:1px solid var(--line); border-radius:4px; padding:3px 6px; font-size:13px;
+}
+footer{padding:0 20px 24px; color:var(--dim); font-size:12px}
+:focus-visible{outline:2px solid var(--green); outline-offset:2px}

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>路口號誌編輯器</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>路口號誌編輯器</h1>
+  <span>左鍵鋪路，接觸到的路會自動接起來 · 右鍵點格子邊緣可單獨封閉／開啟該方向 · 選取後在右欄設定號誌與標線</span>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>路型</h2>
+    <div class="tiles" id="palette"></div>
+    <button id="auto" class="btn full">一鍵設置號誌與時相</button>
+    <h2 style="margin-top:16px">輪播</h2>
+    <button id="play" class="btn full">開始輪播</button>
+    <div class="row">
+      <label>等待倍率</label>
+      <select id="speed">
+        <option value="1">1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>車流量</label>
+      <select id="flow">
+        <option value="5">低 5 台</option>
+        <option value="10" selected>中 10 台</option>
+        <option value="20">高 20 台</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="yield">轉彎車禮讓直行</label>
+      <input id="yield" type="checkbox" checked>
+    </div>
+    <button id="clear" class="btn full">清除車輛</button>
+
+    <h2 style="margin-top:16px">場景</h2>
+    <button id="save" class="btn full">存成 JSON 檔</button>
+    <button id="load" class="btn full">載入 JSON 檔</button>
+    <button id="wipe" class="btn full">清空整張圖</button>
+    <input id="file" type="file" accept="application/json,.json" hidden>
+  </div>
+
+  <canvas id="board"></canvas>
+
+  <div class="panel" id="inspector"></div>
+</main>
+
+<footer id="note"></footer>
+
+<script src="main.js"></script>
+</body>
+</html>
