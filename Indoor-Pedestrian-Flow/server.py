@@ -16,6 +16,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SCENES = os.path.join(ROOT, "scenes")
 NAME = re.compile(r"^[\w-]{1,40}$")
 MAX_BODY = 2 * 1024 * 1024
+PROTECTED = {"tainan-station", "tainan-b1-piano"}   # repo 內建範例，不允許從介面刪除
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -48,6 +49,19 @@ class Handler(SimpleHTTPRequestHandler):
             with open(p, encoding="utf-8") as f:
                 return self._json(200, json.load(f))
         super().do_GET()
+
+    def do_DELETE(self):
+        if not self.path.startswith("/api/scenes/"):
+            return self._json(404, {"error": "not found"})
+        p = self._path()
+        if not p:
+            return self._json(400, {"error": "bad name"})
+        if os.path.basename(p)[:-5] in PROTECTED:
+            return self._json(403, {"error": "built-in scene"})
+        if not os.path.isfile(p):
+            return self._json(404, {"error": "not found"})
+        os.remove(p)
+        self._json(200, {"ok": True})
 
     def do_PUT(self):
         if not self.path.startswith("/api/scenes/"):

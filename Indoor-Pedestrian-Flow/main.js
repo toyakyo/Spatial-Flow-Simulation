@@ -137,6 +137,8 @@ $('file').onchange = e => {
 const srv = {
   list: () => fetch('api/scenes').then(r => r.ok ? r.json() : Promise.reject()),
   get: n => fetch('api/scenes/' + encodeURIComponent(n)).then(r => r.ok ? r.json() : Promise.reject(new Error('讀取失敗'))),
+  del: n => fetch('api/scenes/' + encodeURIComponent(n), {method: 'DELETE'})
+    .then(r => r.ok || Promise.reject(new Error(r.status === 403 ? '內建範例不能刪除。' : '刪除失敗'))),
   put: (n, body) => fetch('api/scenes/' + encodeURIComponent(n), {method: 'PUT', body}).then(r => r.ok || Promise.reject(new Error('寫入失敗'))),
 };
 function refreshServerList(keep) {
@@ -153,6 +155,15 @@ $('srvList').onchange = e => {
   const n = e.target.value;
   if (!n) return;
   srv.get(n).then(d => setScene(normalize(d), `已從伺服器載入 ${n}。`)).catch(err => note.textContent = err.message);
+};
+// 只刪伺服器上的檔案，目前畫面上的場景不受影響
+$('srvDel').onclick = () => {
+  const n = $('srvList').value;
+  if (!n) { note.textContent = '請先在下拉選單選一個伺服器場景。'; return; }
+  if (!confirm(`刪除伺服器上的場景「${n}」？無法復原。`)) return;
+  srv.del(n)
+    .then(() => { note.textContent = `已刪除 scenes/${n}.json。`; refreshServerList(); })
+    .catch(err => note.textContent = err.message);
 };
 $('srvSave').onclick = () => {
   const n = (prompt('場景名稱（英數與 - _）', 'my-scene') || '').trim();
